@@ -25,6 +25,8 @@ data class DeviceItem(val name: String, val address: String, val hasSpp: Boolean
 
 data class SavedPreset(val name: String, val gains: List<Double>)
 
+enum class FitChoice { FAITHFUL, SAFE }
+
 class EqViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- UI state
@@ -54,8 +56,13 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var autoEqEntry by mutableStateOf<AutoEq.Entry?>(null)
         private set
-    var fitResult by mutableStateOf<Fit.Result?>(null)
+    /** Fit allowing boosts (closest to the preset) and cuts-only fit (no clipping risk). */
+    var fitFaithful by mutableStateOf<Fit.Result?>(null)
         private set
+    var fitSafe by mutableStateOf<Fit.Result?>(null)
+        private set
+    var fitChoice by mutableStateOf(FitChoice.FAITHFUL)
+    val fitResult: Fit.Result? get() = if (fitChoice == FitChoice.SAFE) fitSafe else fitFaithful
     var fitSource by mutableStateOf("")
         private set
     var fitLabel by mutableStateOf("")
@@ -63,8 +70,10 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
     var autoEqStatus by mutableStateOf<String?>(null)
         private set
     var pastedPreset by mutableStateOf("")
-    private var lastPresetText: String? = null
-    var maxBoostDb by mutableStateOf(3f)
+
+    var autoVolume by mutableStateOf(prefs.getBoolean("auto_volume", true))
+        private set
+    private val volume = VolumeHelper(app)
 
     var saved by mutableStateOf(loadSaved())
         private set
@@ -137,7 +146,7 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         pendingGains = bands.map { it.gainDb }
         selectedSet = e.selectedSet()
         eqState = e.eqState()
-        fitResult = null
+        fitFaithful = null; fitSafe = null
     }
 
     fun refreshEq() = launchOp("Reading EQ…") { readEq() }
@@ -149,7 +158,7 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         client = null; eq = null
         connectedDevice = null
         bands = emptyList(); pendingGains = emptyList()
-        selectedSet = -1; eqState = -1; fitResult = null
+        selectedSet = -1; eqState = -1; fitFaithful = null; fitSafe = null
     }
 
     // ---- EQ editing
@@ -186,6 +195,52 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         if (selectedSet != id) {
             message = if (eqState == 0) "Start playing audio, then switch again — the device ignores preset changes while idle"
             else "Device kept preset $selectedSet"
+        } else {
+            compensateVolume()
+        }
+    }
+
+    // ---- volume compensation
+
+    private fun volKey(k: String) = "vol_${k}_${connectedDevice?.address}"
+
+    /** Average loudness the active EQ adds (0 when flat or when it mostly cuts). */
+    private fun activeBoostDb(): Double {
+        if (selectedSet != GaiaEq.SET_USER || bands.isEmpty()) return 0.0
+        val lvl = Fit.meanLevelDb(bands.map { it.freqHz.toDouble() }, bands.map { it.q }, bands.map { it.gainDb })
+        return lvl.coerceAtLeast(0.0)
+    }
+
+    /** Undo any previous compensation, then lower media volume by the active EQ's boost. */
+    private fun compensateVolume() {
+        if (!autoVolume || connectedDevice == null) return
+        val prevSteps = prefs.getInt(volKey("steps"), 0)
+        val prevDb = prefs.getFloat(volKey("db"), 0f).toDouble()
+        val need = activeBoostDb()
+        if (kotlin.math.abs(need - prevDb) < 0.5) return
+        volume.moveSteps(-prevSteps)
+        var steps = 0
+        var db = 0.0
+        if (need >= 0.5) {
+            val c = volume.changeBy(-need)
+            steps = c.stepsMoved; db = need
+            message = "EQ adds ~%.1f dB: media volume lowered %.1f dB%s".format(
+                need, -c.changedDb, if (c.exact) "" else " (estimated)")
+        } else if (prevSteps != 0) {
+            message = "Media volume restored (+%.1f dB)".format(prevDb)
+        }
+        prefs.edit().putInt(volKey("steps"), steps).putFloat(volKey("db"), db.toFloat()).apply()
+    }
+
+    fun changeAutoVolume(on: Boolean) {
+        autoVolume = on
+        prefs.edit().putBoolean("auto_volume", on).apply()
+        if (connectedDevice == null) return
+        if (on) {
+            compensateVolume()
+        } else {
+            volume.moveSteps(-prefs.getInt(volKey("steps"), 0))
+            prefs.edit().putInt(volKey("steps"), 0).putFloat(volKey("db"), 0f).apply()
         }
     }
 
@@ -230,11 +285,6 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         fitTo(pastedPreset, "Pasted preset")
     }
 
-    fun refit() = launchOp("Fitting…") {
-        val txt = lastPresetText ?: return@launchOp
-        fitTo(txt, fitLabel)
-    }
-
     private suspend fun fitTo(presetText: String, label: String) {
         if (bands.isEmpty()) throw Exception("Connect to a device first")
         val (target, kind) = try {
@@ -244,13 +294,22 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         }
         val freqs = bands.map { it.freqHz.toDouble() }
         val qs = bands.map { it.q }
-        fitResult = withContext(Dispatchers.Default) {
-            Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = maxBoostDb.toDouble())
+        val (faithful, safe) = withContext(Dispatchers.Default) {
+            Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = 6.0) to
+                Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = 0.0)
         }
+        fitFaithful = faithful
+        fitSafe = safe
+        fitChoice = FitChoice.FAITHFUL
         fitSource = kind
         fitLabel = label
-        lastPresetText = presetText
     }
+
+    fun levelOf(r: Fit.Result): Double =
+        Fit.meanLevelDb(bands.map { it.freqHz.toDouble() }, bands.map { it.q }, r.gainsDb)
+
+    fun peakOf(r: Fit.Result): Double =
+        Fit.peakDb(bands.map { it.freqHz.toDouble() }, bands.map { it.q }, r.gainsDb)
 
     fun applyFit() {
         val f = fitResult ?: return

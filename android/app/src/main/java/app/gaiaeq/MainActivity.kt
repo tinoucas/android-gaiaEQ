@@ -242,44 +242,65 @@ fun AutoEqSection(vm: EqViewModel) {
     vm.autoEqStatus?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
     }
-    Column {
-        Row {
-            Text("Max boost", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            Text("%+.0f dB".format(vm.maxBoostDb), style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace)
-        }
-        Slider(
-            value = vm.maxBoostDb,
-            onValueChange = { vm.maxBoostDb = it.roundToInt().toFloat() },
-            onValueChangeFinished = { if (vm.fitResult != null) vm.refit() },
-            valueRange = 0f..6f,
-            steps = 5,
-        )
+    val faithful = vm.fitFaithful
+    val safe = vm.fitSafe
+    if (faithful != null && safe != null) {
+        Text(vm.fitLabel, fontWeight = FontWeight.SemiBold)
+        Text(vm.fitSource, style = MaterialTheme.typography.bodySmall)
         Text(
-            "Less boost = more headroom (no clipping) but a looser fit. Five wide bands can only " +
-                "imitate some corrections by boosting the middle and lowering the level; compare the error.",
+            "Choose how to fit it to the device's ${vm.bands.size} bands:",
             style = MaterialTheme.typography.bodySmall,
         )
-    }
-
-    val fit = vm.fitResult
-    if (fit != null) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(vm.fitLabel, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${vm.fitSource} · fit error %.2f dB RMS · level offset %+.1f dB".format(fit.rmsErrorDb, fit.offsetDb),
-                    style = MaterialTheme.typography.bodySmall,
+        val fLevel = vm.levelOf(faithful)
+        val fPeak = vm.peakOf(faithful)
+        FitOptionCard(
+            title = "Faithful",
+            subtitle = "closest to the preset",
+            selected = vm.fitChoice == FitChoice.FAITHFUL,
+            result = faithful,
+            bands = vm.bands,
+            notes = buildList {
+                if (fLevel >= 0.5) add(
+                    "Plays ~%.1f dB louder: ".format(fLevel) +
+                        if (vm.autoVolume) "media volume is lowered automatically." else "lower your volume to compensate."
                 )
-                Text(
-                    vm.bands.zip(fit.gainsDb).joinToString("   ") { (b, g) -> "${formatHz(b.freqHz)} %+.1f".format(g) },
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodySmall,
+                if (fPeak > 1.0) add(
+                    "Boosts up to +%.1f dB. The device has no preamp, so loud, bass-heavy tracks may clip.".format(fPeak)
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = vm::applyFit, enabled = vm.busy == null) { Text("Apply to device") }
+                if (fPeak <= 1.0) add("Little or no boost: low clipping risk.")
+            },
+            onClick = { vm.fitChoice = FitChoice.FAITHFUL },
+        )
+        val flat = safe.gainsDb.all { kotlin.math.abs(it) < 0.05 }
+        val same = safe.rmsErrorDb - faithful.rmsErrorDb < 0.05
+        FitOptionCard(
+            title = "Conservative",
+            subtitle = "cuts only",
+            selected = vm.fitChoice == FitChoice.SAFE,
+            result = safe,
+            bands = vm.bands,
+            notes = buildList {
+                add("Never boosts: no added clipping risk and no volume change.")
+                when {
+                    flat -> add("For this preset that means flat: these bands can't follow it without boosting.")
+                    same -> add("Just as accurate as Faithful for this preset.")
+                    else -> add("Less faithful: %.2f dB error vs %.2f dB.".format(safe.rmsErrorDb, faithful.rmsErrorDb))
                 }
-            }
+            },
+            onClick = { vm.fitChoice = FitChoice.SAFE },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = vm.autoVolume, onCheckedChange = vm::changeAutoVolume)
+            Text("Adjust media volume automatically", style = MaterialTheme.typography.bodySmall)
+        }
+        Text(
+            "Volume compensation restores loudness, but if the phone uses Bluetooth absolute volume the " +
+                "device still boosts before its own volume, so it doesn't add headroom. Pick Conservative " +
+                "if you hear distortion.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Button(onClick = vm::applyFit, enabled = vm.busy == null) {
+            Text(if (vm.fitChoice == FitChoice.SAFE) "Apply conservative fit" else "Apply faithful fit")
         }
     }
 
@@ -315,6 +336,44 @@ fun AutoEqSection(vm: EqViewModel) {
     )
     Button(onClick = vm::fitPasted, enabled = vm.busy == null && vm.pastedPreset.isNotBlank()) {
         Text("Fit pasted EQ")
+    }
+}
+
+@Composable
+fun FitOptionCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    result: app.gaiaeq.eq.Fit.Result,
+    bands: List<app.gaiaeq.gaia.Band>,
+    notes: List<String>,
+    onClick: () -> Unit,
+) {
+    val colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    else CardDefaults.cardColors()
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = colors,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selected, onClick = onClick)
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("error %.2f dB".format(result.rmsErrorDb), style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace)
+            }
+            Text(
+                bands.zip(result.gainsDb).joinToString("  ") { (b, g) -> "${formatHz(b.freqHz)} %+.1f".format(g) },
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            notes.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+        }
     }
 }
 

@@ -82,6 +82,14 @@ object Fit {
         return Result(g.toList(), off, err, target, fitted)
     }
 
+    /** Average level change (dB, weighted like the fit) the device EQ causes: how much louder it plays. */
+    fun meanLevelDb(freqs: List<Double>, qs: List<Double>, gains: List<Double>): Double =
+        weightedMean(deviceResponse(freqs, qs, gains.toDoubleArray()), Filters.WEIGHTS)
+
+    /** Largest boost anywhere in the response (dB): the clipping-risk figure. */
+    fun peakDb(freqs: List<Double>, qs: List<Double>, gains: List<Double>): Double =
+        deviceResponse(freqs, qs, gains.toDoubleArray()).max()
+
     private fun weightedMean(x: DoubleArray, w: DoubleArray): Double {
         var s = 0.0; var ws = 0.0
         for (i in x.indices) { s += x[i] * w[i]; ws += w[i] }

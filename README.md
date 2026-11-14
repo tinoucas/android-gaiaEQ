@@ -28,9 +28,16 @@ preset survive power cycles.
 - Lists paired devices, opens the GAIA RFCOMM channel (SPP UUID), checks for
   the EQ feature.
 - Five sliders (−12…+6 dB), Flat / Custom toggle, response graph.
-- AutoEq search (index cached for a week); the chosen correction is fitted to
-  the device's bands (weighted least squares, free level offset) and previewed
-  as target vs fit before applying. Optional *cuts only* mode.
+- AutoEq search (index cached for a week), or paste a ParametricEQ /
+  GraphicEQ text. The correction is fitted to the device's bands (weighted
+  least squares, free level offset, exact under gain limits) two ways, shown
+  side by side with their error:
+  - **Faithful**: boosts up to +6 dB allowed; closest to the preset, but
+    plays louder and can clip on loud tracks (the device has no preamp).
+  - **Conservative**: cuts only; no added clipping risk, less faithful.
+- Optional automatic media-volume compensation for the EQ's average boost,
+  undone when switching back to Flat. With Bluetooth absolute volume this
+  restores loudness but not DSP headroom.
 - Named presets saved on the phone.
 
 Requires Android 12+ (minSdk 31).

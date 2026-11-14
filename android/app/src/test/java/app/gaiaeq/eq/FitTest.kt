@@ -77,6 +77,20 @@ class FitTest {
     }
 
     @Test
+    fun loudnessAndPeakDriveVolumeCompensation() {
+        val (hungry, _) = AutoEq.targetFromText(boostHungry)
+        val f = Fit.fit(hungry, freqs, qs, maxDb = 6.0)
+        assertEquals(4.65, Fit.meanLevelDb(freqs, qs, f.gainsDb), 0.05)   // lower volume ~4.7 dB
+        assertEquals(6.87, Fit.peakDb(freqs, qs, f.gainsDb), 0.05)        // overlapping bands exceed +6
+        val safe = Fit.fit(hungry, freqs, qs, maxDb = 0.0)
+        assertTrue(Fit.peakDb(freqs, qs, safe.gainsDb) <= 1e-9)
+
+        val (b2, _) = AutoEq.targetFromText(blessing2)
+        val g = Fit.fit(b2, freqs, qs, maxDb = 6.0)
+        assertEquals(-2.71, Fit.meanLevelDb(freqs, qs, g.gainsDb), 0.05)  // quieter: no compensation
+    }
+
+    @Test
     fun peakingFilterHitsGainAtCenter() {
         val r = Filters.responseDb(Filter(FilterKind.PK, 1500.0, -6.0, 0.7), doubleArrayOf(1500.0, 20.0))
         assertEquals(-6.0, r[0], 1e-6)
