@@ -91,7 +91,7 @@ Firmware quirks:
 - Switching from another preset back to the user set (63) does not reload the
   stored gains into the DSP (the device reports set 63 and the stored gains,
   but audio stays flat). The app works around this by re-writing the gains
-  after selecting 63; that workaround is not yet confirmed by ear.
+  after selecting 63, which restores the EQ (confirmed by ear on the M4).
 - BLE GAIA requires an encrypted link and the tested devices refused LE
   pairing from Linux; RFCOMM over the existing classic bond works.
 - The tested units share serial `ABCDEF0123456789`, firmware
