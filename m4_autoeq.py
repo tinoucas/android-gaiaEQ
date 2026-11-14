@@ -144,23 +144,36 @@ def search_autoeq(query: str, pick: int | None) -> tuple[str, str]:
 # ----------------------------------------------------------- fitting
 
 def fit(target: np.ndarray, lo: float, hi: float) -> tuple[np.ndarray, float, float]:
-    """Fit 5 band gains + free offset to target (weighted LSQ, gains clipped)."""
-    g = np.zeros(len(M4_BANDS))
-    sw = np.sqrt(W)
+    """Fit 5 band gains + free offset to target: weighted LSQ with gains in [lo, hi].
+
+    Gauss-Newton outer loop; each linearized step is solved under the box
+    constraints by coordinate descent (exact for that convex quadratic).
+    Clamping an unconstrained step instead can stall at the bound."""
+    n = len(M4_BANDS)
+    g = np.zeros(n)
+    w = W / W.sum()
     for _ in range(60):
         base = m4_response(g)
         # Jacobian of response wrt each gain (numerical), plus offset column
-        J = np.empty((len(F), len(g) + 1))
-        for k in range(len(g)):
+        J = np.empty((len(F), n + 1))
+        for k in range(n):
             d = g.copy()
             d[k] += 0.01
             J[:, k] = (m4_response(d) - base) / 0.01
         J[:, -1] = 1.0
-        off = np.average(target - base, weights=W)
-        r = target - (base + off)
-        step, *_ = np.linalg.lstsq(J * sw[:, None], r * sw, rcond=None)
-        g = np.clip(g + step[:-1], lo, hi)
-        if np.max(np.abs(step[:-1])) < 1e-4:
+        r = target - base
+        A = J.T @ (J * w[:, None])
+        A[np.diag_indices_from(A)] += 1e-12
+        b = J.T @ (r * w)
+        lo_d = np.append(lo - g, -np.inf)
+        hi_d = np.append(hi - g, np.inf)
+        x = np.zeros(n + 1)
+        x[-1] = np.average(r, weights=W)
+        for _ in range(500):
+            for k in range(n + 1):
+                x[k] = min(max(x[k] + (b[k] - A[k] @ x) / A[k, k], lo_d[k]), hi_d[k])
+        g = np.clip(g + x[:-1], lo, hi)
+        if np.max(np.abs(x[:-1])) < 1e-6:
             break
     resp = m4_response(g)
     off = np.average(target - resp, weights=W)
@@ -234,8 +247,8 @@ def main():
     src.add_argument("--gains", metavar="G0,G1,G2,G3,G4",
                      help="set the 5 band gains in dB directly (no AutoEq)")
     ap.add_argument("--pick", type=int, help="choose among several AutoEq measurements")
-    ap.add_argument("--max-boost", type=float, default=6.0,
-                    help="max positive band gain in dB (default 6; 0 = cuts only)")
+    ap.add_argument("--max-boost", type=float, default=3.0,
+                    help="max positive band gain in dB (default 3, max 6; 0 = cuts only)")
     ap.add_argument("--max-cut", type=float, default=12.0, help="max cut in dB (default 12)")
     ap.add_argument("--dry-run", action="store_true", help="show the fit, don't touch the M4")
     ap.add_argument("--name", default="BGVP M4")

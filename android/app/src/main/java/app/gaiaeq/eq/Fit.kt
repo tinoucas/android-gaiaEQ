@@ -38,9 +38,8 @@ object Fit {
                 for (i in 0 until m) jac[k][i] = (r[i] - base[i]) / h
             }
             jac[n].fill(1.0)
-            val off = weightedMean(DoubleArray(m) { target[it] - base[it] }, w)
-            val res = DoubleArray(m) { target[it] - base[it] - off }
-            // Normal equations (J^T W J + lambda I) x = J^T W r
+            val res = DoubleArray(m) { target[it] - base[it] }
+            // Normal equations of the linearized problem: (J^T W J) x = J^T W r
             val p = n + 1
             val ata = Array(p) { DoubleArray(p) }
             val atb = DoubleArray(p)
@@ -55,13 +54,26 @@ object Fit {
                 for (i in 0 until m) s += jac[a][i] * w[i] * res[i]
                 atb[a] = s
             }
-            val step = solve(ata, atb)
+            // Box-constrained solve by coordinate descent: exact for this convex
+            // quadratic, unlike clamping an unconstrained step (which can stall at
+            // the bound, e.g. "cuts only" returning all zeros).
+            val lo = DoubleArray(p) { if (it < n) minDb - g[it] else Double.NEGATIVE_INFINITY }
+            val hi = DoubleArray(p) { if (it < n) maxDb - g[it] else Double.POSITIVE_INFINITY }
+            val x = DoubleArray(p)
+            x[n] = weightedMean(res, w)
+            repeat(500) {
+                for (k in 0 until p) {
+                    var dot = 0.0
+                    for (j in 0 until p) dot += ata[k][j] * x[j]
+                    x[k] = (x[k] + (atb[k] - dot) / ata[k][k]).coerceIn(lo[k], hi[k])
+                }
+            }
             var maxStep = 0.0
             for (k in 0 until n) {
-                g[k] = (g[k] + step[k]).coerceIn(minDb, maxDb)
-                maxStep = maxOf(maxStep, abs(step[k]))
+                g[k] = (g[k] + x[k]).coerceIn(minDb, maxDb)
+                maxStep = maxOf(maxStep, abs(x[k]))
             }
-            if (maxStep < 1e-4) break
+            if (maxStep < 1e-6) break
         }
         val resp = deviceResponse(freqs, qs, g)
         val off = weightedMean(DoubleArray(m) { target[it] - resp[it] }, w)
@@ -74,32 +86,5 @@ object Fit {
         var s = 0.0; var ws = 0.0
         for (i in x.indices) { s += x[i] * w[i]; ws += w[i] }
         return s / ws
-    }
-
-    /** Gaussian elimination with partial pivoting. */
-    private fun solve(a0: Array<DoubleArray>, b0: DoubleArray): DoubleArray {
-        val n = b0.size
-        val a = Array(n) { a0[it].copyOf() }
-        val b = b0.copyOf()
-        for (col in 0 until n) {
-            var piv = col
-            for (r in col + 1 until n) if (abs(a[r][col]) > abs(a[piv][col])) piv = r
-            val tr = a[col]; a[col] = a[piv]; a[piv] = tr
-            val tb = b[col]; b[col] = b[piv]; b[piv] = tb
-            val d = a[col][col]
-            if (abs(d) < 1e-15) continue
-            for (r in col + 1 until n) {
-                val f = a[r][col] / d
-                for (c in col until n) a[r][c] -= f * a[col][c]
-                b[r] -= f * b[col]
-            }
-        }
-        val x = DoubleArray(n)
-        for (r in n - 1 downTo 0) {
-            var s = b[r]
-            for (c in r + 1 until n) s -= a[r][c] * x[c]
-            x[r] = if (abs(a[r][r]) < 1e-15) 0.0 else s / a[r][r]
-        }
-        return x
     }
 }

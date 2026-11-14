@@ -38,10 +38,42 @@ class FitTest {
     }
 
     @Test
-    fun cutsOnlyNeverBoosts() {
+    fun cutsOnlyFindsBestCutsNotZeros() {
+        // Old clamp-after-step solver stalled here; bounded solve keeps the real cuts.
         val (target, _) = AutoEq.targetFromText(blessing2)
         val r = Fit.fit(target, freqs, qs, maxDb = 0.0)
-        assertTrue(r.gainsDb.all { it <= 0.0 })
+        assertTrue(r.gainsDb.all { it <= 1e-9 })
+        listOf(-3.13, -2.22, -3.91, 0.0, -6.10).zip(r.gainsDb).forEach { (e, g) -> assertEquals(e, g, 0.05) }
+        assertEquals(1.06, r.rmsErrorDb, 0.02)
+    }
+
+    // Mostly sub-bass/air cuts + narrow features: 5 wide bands can only imitate it by
+    // boosting the middle and lowering the level, so the boost limit trades accuracy.
+    private val boostHungry = """
+        Preamp: -2.6 dB
+        Filter 1: ON PK Fc 22 Hz Gain -5.8 dB Q 0.600
+        Filter 2: ON PK Fc 48 Hz Gain -0.5 dB Q 2.000
+        Filter 3: ON PK Fc 100 Hz Gain 1.2 dB Q 1.400
+        Filter 4: ON PK Fc 310 Hz Gain 0.6 dB Q 1.300
+        Filter 5: ON PK Fc 1800 Hz Gain -0.9 dB Q 2.000
+        Filter 6: ON PK Fc 3900 Hz Gain -1.4 dB Q 2.000
+        Filter 7: ON PK Fc 5400 Hz Gain 2.4 dB Q 2.000
+        Filter 8: ON PK Fc 7800 Hz Gain -1.3 dB Q 2.000
+        Filter 9: ON PK Fc 9700 Hz Gain 6.0 dB Q 2.000
+        Filter 10: ON PK Fc 11000 Hz Gain -4.9 dB Q 2.000
+    """.trimIndent()
+
+    @Test
+    fun boostLimitIsRespectedAndOptimal() {
+        val (target, _) = AutoEq.targetFromText(boostHungry)
+        val free = Fit.fit(target, freqs, qs, maxDb = 6.0)
+        listOf(5.75, 4.66, 2.83, 4.35, 5.67).zip(free.gainsDb).forEach { (e, g) -> assertEquals(e, g, 0.05) }
+        assertEquals(0.66, free.rmsErrorDb, 0.02)
+
+        val capped = Fit.fit(target, freqs, qs, maxDb = 3.0)
+        assertTrue(capped.gainsDb.all { it <= 3.0 + 1e-9 })
+        listOf(3.0, 3.0, 1.74, 3.0, 3.0).zip(capped.gainsDb).forEach { (e, g) -> assertEquals(e, g, 0.05) }
+        assertEquals(0.97, capped.rmsErrorDb, 0.02)
     }
 
     @Test

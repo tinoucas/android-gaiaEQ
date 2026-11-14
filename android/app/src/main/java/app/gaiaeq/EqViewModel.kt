@@ -64,7 +64,7 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var pastedPreset by mutableStateOf("")
     private var lastPresetText: String? = null
-    var cutsOnly by mutableStateOf(false)
+    var maxBoostDb by mutableStateOf(3f)
 
     var saved by mutableStateOf(loadSaved())
         private set
@@ -245,7 +245,7 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         val freqs = bands.map { it.freqHz.toDouble() }
         val qs = bands.map { it.q }
         fitResult = withContext(Dispatchers.Default) {
-            Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = if (cutsOnly) 0.0 else 6.0)
+            Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = maxBoostDb.toDouble())
         }
         fitSource = kind
         fitLabel = label

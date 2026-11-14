@@ -242,9 +242,24 @@ fun AutoEqSection(vm: EqViewModel) {
     vm.autoEqStatus?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = vm.cutsOnly, onCheckedChange = { vm.cutsOnly = it; if (vm.fitResult != null) vm.refit() })
-        Text("Cuts only (no boost, avoids clipping)", style = MaterialTheme.typography.bodySmall)
+    Column {
+        Row {
+            Text("Max boost", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Text("%+.0f dB".format(vm.maxBoostDb), style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace)
+        }
+        Slider(
+            value = vm.maxBoostDb,
+            onValueChange = { vm.maxBoostDb = it.roundToInt().toFloat() },
+            onValueChangeFinished = { if (vm.fitResult != null) vm.refit() },
+            valueRange = 0f..6f,
+            steps = 5,
+        )
+        Text(
+            "Less boost = more headroom (no clipping) but a looser fit. Five wide bands can only " +
+                "imitate some corrections by boosting the middle and lowering the level; compare the error.",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 
     val fit = vm.fitResult
