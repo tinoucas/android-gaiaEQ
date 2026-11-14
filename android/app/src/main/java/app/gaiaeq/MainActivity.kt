@@ -179,6 +179,13 @@ fun EqScreen(vm: EqViewModel) {
             color = MaterialTheme.colorScheme.tertiary,
         )
     }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = vm.autoVolume, onCheckedChange = vm::changeAutoVolume)
+        Text(
+            "Adjust media volume automatically (lowers it when the EQ boosts, restores it on Flat)",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 
     // Graph
     ResponseGraph(vm)
@@ -289,14 +296,10 @@ fun AutoEqSection(vm: EqViewModel) {
             },
             onClick = { vm.fitChoice = FitChoice.SAFE },
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = vm.autoVolume, onCheckedChange = vm::changeAutoVolume)
-            Text("Adjust media volume automatically", style = MaterialTheme.typography.bodySmall)
-        }
         Text(
-            "Volume compensation restores loudness, but if the phone uses Bluetooth absolute volume the " +
-                "device still boosts before its own volume, so it doesn't add headroom. Pick Conservative " +
-                "if you hear distortion.",
+            "Volume compensation (setting at the top) restores loudness, but if the phone uses Bluetooth " +
+                "absolute volume the device still boosts before its own volume, so it doesn't add headroom. " +
+                "Pick Conservative if you hear distortion.",
             style = MaterialTheme.typography.bodySmall,
         )
         Button(onClick = vm::applyFit, enabled = vm.busy == null) {
