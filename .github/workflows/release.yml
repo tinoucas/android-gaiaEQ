@@ -15,14 +15,18 @@ jobs:
       run:
         working-directory: android
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      # Checks gradle-wrapper.jar against Gradle's published checksums.
+      # (Not setup-gradle: since v6 its caching is a proprietary component
+      # with separate terms; setup-java's built-in cache is used instead.)
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-
-      - uses: gradle/actions/setup-gradle@v4
+          cache: gradle
 
       - name: Version from tag
         id: ver
@@ -57,14 +61,14 @@ jobs:
           mv app/build/outputs/apk/release/app-release.apk \
              "app/build/outputs/apk/release/GaiaEQ-${{ steps.ver.outputs.name }}.apk"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: GaiaEQ-${{ steps.ver.outputs.name }}
           path: android/app/build/outputs/apk/release/GaiaEQ-*.apk
 
       - name: Publish GitHub release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: android/app/build/outputs/apk/release/GaiaEQ-*.apk
           generate_release_notes: true
