@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+bt_pair.py
+
+# Android / Gradle
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+.idea/
+*.iml
