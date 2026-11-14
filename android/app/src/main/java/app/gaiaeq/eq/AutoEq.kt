@@ -19,7 +19,7 @@ object AutoEq {
             get() = "$RAW$path/${path.substringAfterLast('/')}%20ParametricEQ.txt"
     }
 
-    private val INDEX_RE = Regex("""^- \[(.+?)]\(\./(.+?)\) by (\S+)(?: on (.+))?$""", RegexOption.MULTILINE)
+    private val INDEX_RE = Regex("""^- \[(.+?)]\(\./(.+?)\) by (.+?)(?: on (.+))?$""", RegexOption.MULTILINE)
     private val FILTER_RE = Regex(
         """Filter\s*\d*:\s*ON\s+(PK|LSC|HSC|LS|HS)\s+Fc\s+([\d.]+)\s*Hz\s+Gain\s+(-?[\d.]+)\s*dB\s+Q\s+([\d.]+)""",
         RegexOption.IGNORE_CASE)
@@ -30,12 +30,23 @@ object AutoEq {
     }.toList()
 
     /** Case-insensitive search; results sorted by name, then preferred measurement source. */
+    private fun normalize(s: String) = s.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    /**
+     * Every query word must appear in the name (any order, punctuation ignored;
+     * also matched against the name without spaces, so "blessing2" finds "Blessing 2").
+     * Exact names first, then alphabetical, then preferred measurement source.
+     */
     fun search(index: List<Entry>, query: String, limit: Int = 50): List<Entry> {
-        val q = query.trim().lowercase()
+        val q = normalize(query)
         if (q.isEmpty()) return emptyList()
+        val words = q.split(' ')
         fun rank(e: Entry) = SOURCE_PRIORITY.indexOf(e.source).let { if (it < 0) 99 else it }
-        return index.filter { q in it.name.lowercase() }
-            .sortedWith(compareBy<Entry>({ it.name.lowercase() != q }, { it.name.lowercase() }, { rank(it) }))
+        return index.filter { e ->
+            val n = normalize(e.name)
+            val compact = n.replace(" ", "")
+            words.all { it in n || it in compact }
+        }.sortedWith(compareBy<Entry>({ normalize(it.name) != q }, { it.name.lowercase() }, { rank(it) }))
             .take(limit)
     }
 

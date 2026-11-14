@@ -239,6 +239,9 @@ fun AutoEqSection(vm: EqViewModel) {
             Text("Search")
         }
     }
+    vm.autoEqStatus?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = vm.cutsOnly, onCheckedChange = { vm.cutsOnly = it; if (vm.fitResult != null) vm.refit() })
         Text("Cuts only (no boost, avoids clipping)", style = MaterialTheme.typography.bodySmall)
@@ -248,7 +251,7 @@ fun AutoEqSection(vm: EqViewModel) {
     if (fit != null) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(vm.autoEqEntry?.let { "${it.name} (${it.label})" } ?: "", fontWeight = FontWeight.SemiBold)
+                Text(vm.fitLabel, fontWeight = FontWeight.SemiBold)
                 Text(
                     "${vm.fitSource} · fit error %.2f dB RMS · level offset %+.1f dB".format(fit.rmsErrorDb, fit.offsetDb),
                     style = MaterialTheme.typography.bodySmall,
@@ -278,6 +281,25 @@ fun AutoEqSection(vm: EqViewModel) {
             }
             if (vm.autoEqEntry == e) Text("✓", color = MaterialTheme.colorScheme.primary)
         }
+    }
+    Spacer(Modifier.height(4.dp))
+    Text("Or paste an EQ", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "For models AutoEq doesn't have: export an EQ from a graph tool (e.g. a squig.link site) " +
+            "or AutoEq's web app as ParametricEQ (\"Filter 1: ON PK Fc … Hz Gain … dB Q …\") " +
+            "or GraphicEQ text and paste it here.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OutlinedTextField(
+        value = vm.pastedPreset,
+        onValueChange = { vm.pastedPreset = it },
+        label = { Text("ParametricEQ / GraphicEQ text") },
+        minLines = 3,
+        maxLines = 8,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(onClick = vm::fitPasted, enabled = vm.busy == null && vm.pastedPreset.isNotBlank()) {
+        Text("Fit pasted EQ")
     }
 }
 

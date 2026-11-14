@@ -112,7 +112,7 @@ def fetch(url: str) -> str:
 def search_autoeq(query: str, pick: int | None) -> tuple[str, str]:
     """Return (label, ParametricEQ URL) for an IEM name from AutoEq's index."""
     index = fetch(AUTOEQ_RAW + "INDEX.md")
-    rows = re.findall(r"^- \[(.+?)\]\(\./(.+?)\) by (\S+)(?: on (.+))?$", index, re.M)
+    rows = re.findall(r"^- \[(.+?)\]\(\./(.+?)\) by (.+?)(?: on (.+))?$", index, re.M)
     q = query.lower()
     hits = [r for r in rows if q in r[0].lower()]
     if not hits:

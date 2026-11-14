@@ -60,6 +60,30 @@ class FitTest {
     }
 
     @Test
+    fun searchMatchesWordsInAnyOrderAndCompact() {
+        val md = """
+            - [CrinEar Daybreak](./Super%20Review/in-ear/CrinEar%20Daybreak) by Super Review
+            - [Moondrop Blessing 2](./oratory1990/in-ear/Moondrop%20Blessing%202) by oratory1990
+            - [Moondrop Blessing 2 Dusk](./crinacle/711%20in-ear/Moondrop%20Blessing%202%20Dusk) by crinacle on 711
+        """.trimIndent()
+        val idx = AutoEq.parseIndex(md)
+        assertEquals(listOf("CrinEar Daybreak"), AutoEq.search(idx, "daybreak crinear").map { it.name })
+        assertEquals(2, AutoEq.search(idx, "blessing2").size)
+        assertEquals("Moondrop Blessing 2", AutoEq.search(idx, "moondrop blessing 2").first().name)
+        assertTrue(AutoEq.search(idx, "crinear nightfall").isEmpty())
+        assertTrue(AutoEq.search(idx, "  ").isEmpty())
+    }
+
+    @Test
+    fun pastedApoPresetParses() {
+        val txt = "Preamp: -2.0 dB\r\nFilter 1: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.00\r\n"
+        val (t, kind) = AutoEq.targetFromText(txt)
+        assertTrue(kind.startsWith("ParametricEQ (1"))
+        val i = Filters.GRID.indices.minBy { kotlin.math.abs(Filters.GRID[it] - 1000.0) }
+        assertEquals(-3.0, t[i], 0.1)
+    }
+
+    @Test
     fun indexParsesAndRanksSources() {
         val md = """
             - [Moondrop Blessing 2](./crinacle/711%20in-ear/Moondrop%20Blessing%202) by crinacle on 711

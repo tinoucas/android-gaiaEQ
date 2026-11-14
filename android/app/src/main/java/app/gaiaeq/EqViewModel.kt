@@ -58,6 +58,12 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var fitSource by mutableStateOf("")
         private set
+    var fitLabel by mutableStateOf("")
+        private set
+    var autoEqStatus by mutableStateOf<String?>(null)
+        private set
+    var pastedPreset by mutableStateOf("")
+    private var lastPresetText: String? = null
     var cutsOnly by mutableStateOf(false)
 
     var saved by mutableStateOf(loadSaved())
@@ -70,7 +76,10 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
     val dirty: Boolean get() = bands.isNotEmpty() && pendingGains != bands.map { it.gainDb }
 
     private fun launchOp(label: String, block: suspend () -> Unit) {
-        if (busy != null) return
+        if (busy != null) {
+            message = "Busy: $busy"
+            return
+        }
         busy = label
         viewModelScope.launch {
             try {
@@ -182,34 +191,65 @@ class EqViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- AutoEq
 
-    fun searchAutoEq() = launchOp("Searching AutoEq…") {
-        val cache = getApplication<Application>().cacheDir
-        val idx = autoEqIndex ?: withContext(Dispatchers.IO) { AutoEq.loadIndex(cache) }.also { autoEqIndex = it }
-        autoEqResults = AutoEq.search(idx, autoEqQuery)
-        if (autoEqResults.isEmpty()) message = "No AutoEq results for \"$autoEqQuery\""
+    fun searchAutoEq() {
+        val query = autoEqQuery.trim()
+        if (query.isEmpty()) return
+        if (busy != null) {
+            message = "Busy: $busy"
+            return
+        }
+        autoEqStatus = "Searching…"
+        launchOp("Searching AutoEq…") {
+            try {
+                val cache = getApplication<Application>().cacheDir
+                val idx = autoEqIndex ?: withContext(Dispatchers.IO) { AutoEq.loadIndex(cache) }
+                    .also { autoEqIndex = it }
+                autoEqResults = AutoEq.search(idx, query)
+                autoEqStatus = when (autoEqResults.size) {
+                    0 -> "\"$query\" isn't in AutoEq's database (${idx.size} profiles). " +
+                        "You can paste an EQ exported from a graph tool below."
+                    1 -> "1 result for \"$query\""
+                    else -> "${autoEqResults.size} results for \"$query\""
+                }
+            } catch (e: Exception) {
+                autoEqStatus = "Search failed: ${e.message ?: e.javaClass.simpleName}"
+                throw e
+            }
+        }
     }
 
     fun pickAutoEq(entry: AutoEq.Entry) = launchOp("Fitting ${entry.name}…") {
         val txt = withContext(Dispatchers.IO) { AutoEq.fetch(entry.parametricUrl) }
         autoEqEntry = entry
-        fitTo(txt)
+        fitTo(txt, "${entry.name} (${entry.label})")
+    }
+
+    /** Fit a pasted ParametricEQ (APO "Filter N: ON PK Fc …") or GraphicEQ text. */
+    fun fitPasted() = launchOp("Fitting pasted preset…") {
+        autoEqEntry = null
+        fitTo(pastedPreset, "Pasted preset")
     }
 
     fun refit() = launchOp("Fitting…") {
-        val entry = autoEqEntry ?: return@launchOp
-        val txt = withContext(Dispatchers.IO) { AutoEq.fetch(entry.parametricUrl) }
-        fitTo(txt)
+        val txt = lastPresetText ?: return@launchOp
+        fitTo(txt, fitLabel)
     }
 
-    private suspend fun fitTo(presetText: String) {
+    private suspend fun fitTo(presetText: String, label: String) {
         if (bands.isEmpty()) throw Exception("Connect to a device first")
-        val (target, kind) = AutoEq.targetFromText(presetText)
+        val (target, kind) = try {
+            AutoEq.targetFromText(presetText)
+        } catch (e: IllegalArgumentException) {
+            throw Exception("Couldn't read preset: ${e.message}")
+        }
         val freqs = bands.map { it.freqHz.toDouble() }
         val qs = bands.map { it.q }
         fitResult = withContext(Dispatchers.Default) {
             Fit.fit(target, freqs, qs, minDb = -12.0, maxDb = if (cutsOnly) 0.0 else 6.0)
         }
         fitSource = kind
+        fitLabel = label
+        lastPresetText = presetText
     }
 
     fun applyFit() {
