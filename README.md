@@ -98,6 +98,12 @@ Firmware quirks:
   `1.0.0 "(unreleased)"` and `00:02:5B:00:FF:xx` addresses, i.e. close to
   Qualcomm reference firmware.
 
+## License
+
+[MIT](LICENSE). AutoEq profiles are downloaded at runtime from the
+[AutoEq](https://github.com/jaakkopasanen/AutoEq) repository and are not
+included here.
+
 ## Disclaimer
 
 Unofficial; not affiliated with Qualcomm, BGVP or AutoEq. Only gain writes
