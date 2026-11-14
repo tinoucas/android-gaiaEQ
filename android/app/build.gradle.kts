@@ -12,13 +12,30 @@ android {
         applicationId = "app.gaiaeq"
         minSdk = 31          // Android 12: BLUETOOTH_CONNECT runtime permission model
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        // CI passes these from the git tag / run number; local builds get dev values.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "0.1-dev"
+    }
+
+    // Release signing comes from the environment (GitHub Actions secrets), never the repo.
+    val storeFilePath = System.getenv("SIGNING_STORE_FILE")
+    signingConfigs {
+        if (storeFilePath != null) {
+            create("release") {
+                storeFile = file(storeFilePath)
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

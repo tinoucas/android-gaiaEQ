@@ -33,7 +33,18 @@ preset survive power cycles.
   as target vs fit before applying. Optional *cuts only* mode.
 - Named presets saved on the phone.
 
-Requires Android 12+ (minSdk 31). Build:
+Requires Android 12+ (minSdk 31).
+
+**Download:** signed APKs are attached to
+[Releases](../../releases). Install it on the phone (allow installing from your
+browser or file manager when Android asks).
+
+**Releasing:** push a tag `vX.Y.Z`. The *Release APK* workflow tests,
+builds and signs the APK on GitHub and publishes it as a release. It needs the
+repo secrets `KEYSTORE_BASE64` (base64 of the release keystore, alias `gaiaeq`)
+and `KEYSTORE_PASSWORD`.
+
+Build locally:
 
 ```sh
 cd android
